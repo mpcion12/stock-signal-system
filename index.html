@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주식 시그널 시스템 v1.3f</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+/* ========== RESET & BASE ========== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;scroll-behavior:smooth}
+body{min-height:100dvh;line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Noto Sans KR',sans-serif;font-size:18px;color:#e2e8f0;background:#0f172a}
+button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
+table{border-collapse:collapse;width:100%}
+input,select,textarea{font:inherit;color:inherit}
+
+/* ========== VARIABLES ========== */
+:root{
+  --bg:#0f172a;--card:#1e293b;--border:#334155;
+  --text:#e2e8f0;--text-sub:#94a3b8;--text-dim:#64748b;
+  --green:#10B981;--yellow:#F59E0B;--red:#EF4444;--blue:#3B82F6;
+  --green-bg:rgba(16,185,129,0.1);--yellow-bg:rgba(245,158,11,0.1);--red-bg:rgba(239,68,68,0.1);--blue-bg:rgba(59,130,246,0.1);
+  --radius:8px;--radius-lg:12px;
+}
+
+/* ========== PASSWORD SCREEN ========== */
+.pw-overlay{position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;transition:opacity .4s,visibility .4s}
+.pw-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.pw-logo{font-size:16px;letter-spacing:2px;text-transform:uppercase;color:#64748b;margin-bottom:8px}
+.pw-title{font-size:28px;font-weight:700;color:#e2e8f0}
+.pw-input-wrap{display:flex;gap:8px;align-items:center}
+.pw-input{background:#1e293b;border:1px solid #334155;border-radius:var(--radius);padding:12px 18px;color:#e2e8f0;font-size:20px;width:180px;text-align:center;letter-spacing:8px;outline:none;transition:border-color .2s}
+.pw-input:focus{border-color:#3B82F6}
+.pw-btn{background:#3B82F6;color:#fff;border-radius:var(--radius);padding:12px 28px;font-size:17px;font-weight:600;transition:background .2s}
+.pw-btn:hover{background:#2563EB}
+.pw-error{color:#EF4444;font-size:15px;min-height:20px}
+
+/* ========== APP SHELL ========== */
+.app{display:none;flex-direction:column;min-height:100dvh}
+.app.visible{display:flex}
+
+/* Header */
+.header{background:#1e293b;border-bottom:1px solid #334155;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:12px}
+.header-logo{width:32px;height:32px;border-radius:6px;background:linear-gradient(135deg,#3B82F6,#10B981);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0}
+.header-title{font-size:19px;font-weight:700;color:#e2e8f0}
+.header-ver{font-size:13px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:20px;margin-left:4px}
+
+/* Tab bar */
+.tab-bar{display:flex;gap:2px;background:#0f172a;border-bottom:1px solid #334155;padding:0 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{padding:14px 18px;font-size:16px;font-weight:500;color:#64748b;white-space:nowrap;border-bottom:2px solid transparent;transition:color .2s,border-color .2s;flex-shrink:0}
+.tab-btn:hover{color:#94a3b8}
+.tab-btn.active{color:#3B82F6;border-bottom-color:#3B82F6}
+
+/* Content */
+.tab-content{flex:1;padding:20px;max-width:1200px;width:100%;margin:0 auto}
+.tab-panel{display:none;animation:fadeIn .3s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ========== CARDS ========== */
+.card{background:#1e293b;border:1px solid #334155;border-radius:var(--radius-lg);padding:20px;margin-bottom:16px}
+.card-title{font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-title .icon{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+
+/* ========== TABLES ========== */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:-4px}
+.tbl{width:100%;font-size:16px;white-space:nowrap}
+.tbl th{padding:10px 14px;text-align:left;font-weight:600;color:#94a3b8;border-bottom:1px solid #334155;background:#0f172a;position:sticky;top:0;font-size:14px;text-transform:uppercase;letter-spacing:.5px}
+.tbl td{padding:10px 14px;border-bottom:1px solid rgba(51,65,85,.5);color:#e2e8f0}
+.tbl tr:hover td{background:rgba(59,130,246,.04)}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl .pos{color:#10B981}.tbl .neg{color:#EF4444}
+
+/* ========== BADGES ========== */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:14px;font-weight:600;letter-spacing:.3px}
+.badge-green{background:var(--green-bg);color:#10B981}
+.badge-yellow{background:var(--yellow-bg);color:#F59E0B}
+.badge-red{background:var(--red-bg);color:#EF4444}
+.badge-blue{background:var(--blue-bg);color:#3B82F6}
+
+/* ========== TAB 1: PIPELINE ========== */
+.pipeline{display:flex;flex-direction:column;gap:8px}
+.pipe-step{background:#1e293b;border:1px solid #334155;border-radius:var(--radius);overflow:hidden;transition:border-color .2s}
+.pipe-step:hover{border-color:#475569}
+.pipe-head{padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.pipe-num{width:28px;height:28px;border-radius:6px;background:#3B82F6;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.pipe-label{font-size:17px;font-weight:600;color:#e2e8f0;flex:1}
+.pipe-badge{margin-left:auto}
+.pipe-arrow{color:#64748b;transition:transform .2s;font-size:18px;flex-shrink:0}
+.pipe-step.open .pipe-arrow{transform:rotate(180deg)}
+.pipe-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.pipe-step.open .pipe-body{max-height:600px}
+.pipe-detail{padding:0 16px 16px 56px;font-size:16px;color:#94a3b8;line-height:1.7}
+.pipe-detail ul{padding-left:16px;margin-top:4px}
+.pipe-detail li{margin-bottom:2px}
+.pipe-detail strong{color:#e2e8f0}
+
+/* Guardrails */
+.guardrails-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.gr-item{background:#0f172a;border:1px solid #334155;border-radius:var(--radius);padding:14px;display:flex;gap:10px;align-items:flex-start}
+.gr-icon{font-size:18px;flex-shrink:0;line-height:1}
+.gr-text{font-size:16px;color:#94a3b8;line-height:1.5}
+.gr-text strong{color:#e2e8f0;display:block;margin-bottom:2px}
+
+/* ========== TAB 2: BACKTEST ========== */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-bottom:16px}
+.chart-card{background:#1e293b;border:1px solid #334155;border-radius:var(--radius-lg);padding:16px}
+.chart-card h3{font-size:16px;font-weight:600;color:#94a3b8;margin-bottom:12px}
+.chart-wrap{position:relative;height:260px}
+
+.drill-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.drill-controls label{font-size:16px;color:#94a3b8}
+.sel{background:#0f172a;border:1px solid #334155;border-radius:var(--radius);padding:10px 14px;color:#e2e8f0;font-size:16px;outline:none;min-width:200px}
+.sel:focus{border-color:#3B82F6}
+
+/* ========== TAB 3: CONFIG ========== */
+.config-section{margin-bottom:24px}
+.config-section h3{font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.exit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.exit-card{background:#0f172a;border:1px solid #334155;border-radius:var(--radius);padding:14px}
+.exit-card h4{font-size:16px;font-weight:700;color:#3B82F6;margin-bottom:8px}
+.exit-card p{font-size:15px;color:#94a3b8;line-height:1.6}
+
+/* ========== TAB 4: SIMULATOR ========== */
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:768px){.sim-grid{grid-template-columns:1fr}}
+.sim-inputs .card{position:sticky;top:70px}
+.sim-label{display:block;font-size:15px;font-weight:600;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.sim-row{margin-bottom:14px}
+.sim-input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:var(--radius);padding:10px 14px;color:#e2e8f0;font-size:17px;outline:none;transition:border-color .2s}
+.sim-input:focus{border-color:#3B82F6}
+.sim-slider-wrap{display:flex;align-items:center;gap:12px}
+.sim-slider{flex:1;-webkit-appearance:none;appearance:none;height:6px;background:#334155;border-radius:3px;outline:none}
+.sim-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#3B82F6;cursor:pointer}
+.sim-slider-val{font-size:17px;font-weight:700;color:#e2e8f0;min-width:36px;text-align:right}
+.sim-toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
+.sim-toggle input{display:none}
+.sim-toggle .track{width:40px;height:22px;background:#334155;border-radius:11px;position:relative;transition:background .2s}
+.sim-toggle input:checked+.track{background:#3B82F6}
+.sim-toggle .thumb{position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
+.sim-toggle input:checked+.track .thumb{left:20px}
+.sim-toggle-label{font-size:16px;color:#e2e8f0}
+.sim-run-btn{width:100%;padding:14px;background:#3B82F6;color:#fff;font-size:17px;font-weight:700;border-radius:var(--radius);margin-top:8px;transition:background .2s}
+.sim-run-btn:hover{background:#2563EB}
+
+/* Pipeline result */
+.sim-step{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid rgba(51,65,85,.4)}
+.sim-step:last-child{border-bottom:none}
+.sim-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.sim-icon.pass{background:var(--green-bg);color:#10B981}
+.sim-icon.fail{background:var(--red-bg);color:#EF4444}
+.sim-icon.warn{background:var(--yellow-bg);color:#F59E0B}
+.sim-step-info{flex:1}
+.sim-step-title{font-size:16px;font-weight:600;color:#e2e8f0}
+.sim-step-detail{font-size:15px;color:#94a3b8;margin-top:2px}
+.sim-verdict{text-align:center;padding:24px;margin-top:8px;border-radius:var(--radius-lg)}
+.sim-verdict.recommend{background:var(--green-bg);border:1px solid rgba(16,185,129,.3)}
+.sim-verdict.hold{background:var(--yellow-bg);border:1px solid rgba(245,158,11,.3)}
+.sim-verdict.reject{background:var(--red-bg);border:1px solid rgba(239,68,68,.3)}
+.sim-verdict-label{font-size:34px;font-weight:800;margin-bottom:4px}
+.sim-verdict-sub{font-size:16px;color:#94a3b8}
+
+/* ========== RESPONSIVE ========== */
+@media(max-width:640px){
+  .header{padding:10px 14px}
+  .header-title{font-size:17px}
+  .tab-btn{padding:12px 14px;font-size:15px}
+  .tab-content{padding:14px}
+  .card{padding:14px}
+  .chart-grid{grid-template-columns:1fr}
+  .guardrails-grid{grid-template-columns:1fr}
+  .tbl{font-size:15px}
+  .tbl th,.tbl td{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+
+<!-- PASSWORD SCREEN -->
+<div class="pw-overlay" id="pwOverlay">
+  <div class="pw-logo">STOCK SIGNAL SYSTEM</div>
+  <div class="pw-title">주식 시그널 시스템 v1.3f</div>
+  <div class="pw-input-wrap">
+    <input type="password" class="pw-input" id="pwInput" maxlength="4" placeholder="••••" autocomplete="off" data-testid="input-password">
+    <button class="pw-btn" id="pwBtn" data-testid="button-login">입장</button>
+  </div>
+  <div class="pw-error" id="pwError"></div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-logo">S</div>
+      <span class="header-title">주식 시그널 시스템</span>
+      <span class="header-ver">v1.3f</span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tab-bar" role="tablist">
+    <button class="tab-btn active" data-tab="tab1" role="tab" data-testid="tab-system">시스템 구조</button>
+    <button class="tab-btn" data-tab="tab2" role="tab" data-testid="tab-backtest">백테스트 결과</button>
+    <button class="tab-btn" data-tab="tab3" role="tab" data-testid="tab-config">설정값 사전</button>
+    <button class="tab-btn" data-tab="tab4" role="tab" data-testid="tab-simulator">시그널 시뮬레이터</button>
+  </nav>
+
+  <!-- Tab Content -->
+  <div class="tab-content">
+
+    <!-- ========== TAB 1: 시스템 구조 ========== -->
+    <div class="tab-panel active" id="tab1">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">
+          <span class="icon" style="background:var(--blue-bg);color:#3B82F6">⚙</span>
+          전체 파이프라인 흐름
+        </div>
+        <p style="font-size:16px;color:#94a3b8;margin-bottom:4px">각 단계를 클릭하면 세부 내용을 확인할 수 있습니다. 색상은 확정 상태를 나타냅니다.</p>
+        <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+          <span class="badge badge-green">● Confirmed</span>
+          <span class="badge badge-yellow">● Candidate</span>
+          <span class="badge badge-red">● Deferred</span>
+        </div>
+      </div>
+
+      <div class="pipeline" id="pipeline"></div>
+
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">
+          <span class="icon" style="background:var(--yellow-bg);color:#F59E0B">⚠</span>
+          운영 가드레일
+        </div>
+        <div class="guardrails-grid" id="guardrails"></div>
+      </div>
+    </div>
+
+    <!-- ========== TAB 2: 백테스트 결과 ========== -->
+    <div class="tab-panel" id="tab2">
+      <div class="card">
+        <div class="card-title">
+          <span class="icon" style="background:var(--blue-bg);color:#3B82F6">📊</span>
+          전략 비교 테이블
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl" id="strategyTable">
+            <thead><tr>
+              <th>전략</th><th class="num">신호수</th><th class="num">필터링</th><th class="num">거래수</th>
+              <th class="num">승</th><th class="num">패</th><th class="num">승률(%)</th>
+              <th class="num">평균수익률(%)</th><th class="num">NAV</th><th class="num">MDD(%)</th>
+            </tr></thead>
+            <tbody id="strategyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card"><h3>전략별 승률 비교</h3><div class="chart-wrap"><canvas id="chartWR"></canvas></div></div>
+        <div class="chart-card"><h3>전략별 평균수익률 비교</h3><div class="chart-wrap"><canvas id="chartAvgRet"></canvas></div></div>
+        <div class="chart-card"><h3>전략별 MDD 비교</h3><div class="chart-wrap"><canvas id="chartMDD"></canvas></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span class="icon" style="background:var(--green-bg);color:#10B981">🔍</span>
+          종목별 성과 드릴다운
+        </div>
+        <div class="drill-controls">
+          <label for="drillStrategy">전략 선택:</label>
+          <select class="sel" id="drillStrategy" data-testid="select-drill-strategy"></select>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>종목</th><th class="num">거래수</th><th class="num">승</th><th class="num">패</th>
+              <th class="num">승률(%)</th><th class="num">누적수익률(%)</th>
+            </tr></thead>
+            <tbody id="drillBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:16px">
+          <div class="chart-wrap" style="height:280px"><canvas id="chartDrill"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== TAB 3: 설정값 사전 ========== -->
+    <div class="tab-panel" id="tab3">
+      <!-- Confirmed -->
+      <div class="config-section">
+        <h3><span class="badge badge-green">Confirmed</span> 확정 상수</h3>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap">
+            <table class="tbl" id="confirmedTable">
+              <thead><tr><th>상수명</th><th>값</th><th>설명</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate -->
+      <div class="config-section">
+        <h3><span class="badge badge-yellow">Candidate</span> 후보 설정</h3>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap">
+            <table class="tbl" id="candidateTable">
+              <thead><tr><th>설정명</th><th>현재값</th><th>비교 범위</th><th>설명</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deferred -->
+      <div class="config-section">
+        <h3><span class="badge badge-red">Deferred</span> 보류 항목</h3>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap">
+            <table class="tbl" id="deferredTable">
+              <thead><tr><th>항목</th><th>상태</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Exit modes -->
+      <div class="config-section">
+        <h3><span class="badge badge-blue">EXIT</span> 출구 4모드 상세</h3>
+        <div class="exit-grid" id="exitGrid"></div>
+      </div>
+    </div>
+
+    <!-- ========== TAB 4: 시그널 시뮬레이터 ========== -->
+    <div class="tab-panel" id="tab4">
+      <div class="sim-grid">
+        <div class="sim-inputs">
+          <div class="card">
+            <div class="card-title">
+              <span class="icon" style="background:var(--blue-bg);color:#3B82F6">🎛</span>
+              입력값 설정
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">종목명</label>
+              <input type="text" class="sim-input" id="simStock" value="삼성전자" data-testid="input-sim-stock">
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">20일 평균 거래대금 (억원)</label>
+              <input type="number" class="sim-input" id="simLiquidity" value="5000" min="0" data-testid="input-sim-liquidity">
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">거래량 배수 (오늘/SMA20)</label>
+              <input type="number" class="sim-input" id="simVolMult" value="1.5" min="0" step="0.1" data-testid="input-sim-volmult">
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">DTW 점수</label>
+              <div class="sim-slider-wrap">
+                <input type="range" class="sim-slider" id="simDTW" min="0" max="100" value="70" data-testid="slider-dtw">
+                <span class="sim-slider-val" id="simDTWVal">70</span>
+              </div>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">클래식 점수</label>
+              <div class="sim-slider-wrap">
+                <input type="range" class="sim-slider" id="simClassic" min="0" max="100" value="65" data-testid="slider-classic">
+                <span class="sim-slider-val" id="simClassicVal">65</span>
+              </div>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">기술 점수</label>
+              <div class="sim-slider-wrap">
+                <input type="range" class="sim-slider" id="simTech" min="0" max="100" value="60" data-testid="slider-tech">
+                <span class="sim-slider-val" id="simTechVal">60</span>
+              </div>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-toggle" data-testid="toggle-news">
+                <input type="checkbox" id="simNews">
+                <span class="track"><span class="thumb"></span></span>
+                <span class="sim-toggle-label">뉴스/공시 여부</span>
+              </label>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-toggle" data-testid="toggle-sector">
+                <input type="checkbox" id="simSector" checked>
+                <span class="track"><span class="thumb"></span></span>
+                <span class="sim-toggle-label">섹터 동조 여부</span>
+              </label>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-toggle" data-testid="toggle-abnormal">
+                <input type="checkbox" id="simAbnormal">
+                <span class="track"><span class="thumb"></span></span>
+                <span class="sim-toggle-label">비정상 가격 패턴</span>
+              </label>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">Regime</label>
+              <select class="sim-input" id="simRegime" data-testid="select-regime">
+                <option value="BULL">BULL</option>
+                <option value="NEUTRAL" selected>NEUTRAL</option>
+                <option value="BEAR">BEAR</option>
+                <option value="CRISIS">CRISIS</option>
+              </select>
+            </div>
+
+            <div class="sim-row">
+              <label class="sim-label">출구 모드</label>
+              <select class="sim-input" id="simExit" data-testid="select-exit">
+                <option value="FIXED_8">FIXED_8 (익절 +8%, 손절 -5%)</option>
+                <option value="FIXED_10" selected>FIXED_10 (익절 +10%, 손절 -5%)</option>
+                <option value="TRAILING">TRAILING (활성화 +5%, 트레일 -3%)</option>
+                <option value="FRIDAY_CLOSE">FRIDAY_CLOSE (금요일 청산)</option>
+              </select>
+            </div>
+
+            <button class="sim-run-btn" id="simRunBtn" data-testid="button-simulate">▶ 시뮬레이션 실행</button>
+          </div>
+        </div>
+
+        <div class="sim-results">
+          <div class="card" id="simResultCard">
+            <div class="card-title">
+              <span class="icon" style="background:var(--green-bg);color:#10B981">📋</span>
+              파이프라인 결과
+            </div>
+            <div id="simOutput" style="color:#64748b;font-size:16px">
+              왼쪽의 입력값을 설정하고 시뮬레이션 실행 버튼을 누르세요.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- tab-content -->
+</div><!-- app -->
+
+<script>
+// ========== AUTH ==========
+let isAuthenticated = false;
+const CORRECT_PW = '1212';
+const pwOverlay = document.getElementById('pwOverlay');
+const pwInput = document.getElementById('pwInput');
+const pwBtn = document.getElementById('pwBtn');
+const pwError = document.getElementById('pwError');
+const appEl = document.getElementById('app');
+
+function attemptLogin() {
+  if (pwInput.value === CORRECT_PW) {
+    isAuthenticated = true;
+    pwOverlay.classList.add('hidden');
+    appEl.classList.add('visible');
+    initApp();
+  } else {
+    pwError.textContent = '비밀번호가 올바르지 않습니다.';
+    pwInput.value = '';
+    pwInput.focus();
+  }
+}
+pwBtn.addEventListener('click', attemptLogin);
+pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
+pwInput.focus();
+
+// ========== DATA ==========
+const TICKER_MAP = {
+  '005930':'삼성전자','000660':'SK하이닉스','035420':'NAVER','035720':'카카오',
+  '051910':'LG화학','006400':'삼성SDI','003670':'포스코퓨처엠','055550':'신한지주',
+  '105560':'KB금융','012330':'현대모비스'
+};
+
+const V4 = {
+  "A_엄격(RSI+ADX+BB)":{"signals":30,"filtered_out":184,"trades":30,"wins":17,"losses":13,"win_rate":56.7,"avg_return":1.65,"nav":1.05,"mdd":-2.32,"ticker_stats":{"000660":{"wins":2,"losses":1,"total_ret":7.750000000000001,"total":3,"wr":66.7},"035420":{"wins":1,"losses":2,"total_ret":-0.5599999999999987,"total":3,"wr":33.3},"035720":{"wins":2,"losses":5,"total_ret":-15.13,"total":7,"wr":28.6},"051910":{"wins":1,"losses":1,"total_ret":-0.02999999999999997,"total":2,"wr":50.0},"006400":{"wins":3,"losses":1,"total_ret":20.990000000000002,"total":4,"wr":75.0},"003670":{"wins":3,"losses":1,"total_ret":11.61,"total":4,"wr":75.0},"055550":{"wins":2,"losses":0,"total_ret":7.23,"total":2,"wr":100.0},"105560":{"wins":1,"losses":1,"total_ret":0.1,"total":2,"wr":50.0},"012330":{"wins":2,"losses":1,"total_ret":17.52,"total":3,"wr":66.7}}},
+  "B_중간(ADX+BB)":{"signals":35,"filtered_out":173,"trades":35,"wins":19,"losses":16,"win_rate":54.3,"avg_return":1.08,"nav":1.0379,"mdd":-2.21,"ticker_stats":{"005930":{"wins":0,"losses":1,"total_ret":-5.08,"total":1,"wr":0.0},"000660":{"wins":2,"losses":1,"total_ret":7.750000000000001,"total":3,"wr":66.7},"035420":{"wins":2,"losses":2,"total_ret":0.5900000000000012,"total":4,"wr":50.0},"035720":{"wins":2,"losses":5,"total_ret":-16.4,"total":7,"wr":28.6},"051910":{"wins":1,"losses":1,"total_ret":-0.02999999999999997,"total":2,"wr":50.0},"006400":{"wins":3,"losses":1,"total_ret":19.41,"total":4,"wr":75.0},"003670":{"wins":4,"losses":1,"total_ret":11.62,"total":5,"wr":80.0},"055550":{"wins":2,"losses":1,"total_ret":2.710000000000001,"total":3,"wr":66.7},"105560":{"wins":1,"losses":2,"total_ret":-0.23,"total":3,"wr":33.3},"012330":{"wins":2,"losses":1,"total_ret":17.52,"total":3,"wr":66.7}}},
+  "C_완화(BB만)":{"signals":60,"filtered_out":136,"trades":60,"wins":30,"losses":30,"win_rate":50.0,"avg_return":0.49,"nav":1.0288,"mdd":-3.16,"ticker_stats":{"005930":{"wins":1,"losses":1,"total_ret":-2.04,"total":2,"wr":50.0},"000660":{"wins":5,"losses":3,"total_ret":15.41,"total":8,"wr":62.5},"035420":{"wins":2,"losses":2,"total_ret":0.5900000000000012,"total":4,"wr":50.0},"035720":{"wins":2,"losses":8,"total_ret":-20.930000000000003,"total":10,"wr":20.0},"051910":{"wins":3,"losses":4,"total_ret":-10.079999999999998,"total":7,"wr":42.9},"006400":{"wins":5,"losses":2,"total_ret":17.47,"total":7,"wr":71.4},"003670":{"wins":4,"losses":3,"total_ret":0.34999999999999964,"total":7,"wr":57.1},"055550":{"wins":4,"losses":2,"total_ret":12.950000000000003,"total":6,"wr":66.7},"105560":{"wins":1,"losses":3,"total_ret":-5.670000000000001,"total":4,"wr":25.0},"012330":{"wins":3,"losses":2,"total_ret":21.48,"total":5,"wr":60.0}}},
+  "D_눌림목(가격관계)":{"signals":40,"filtered_out":170,"trades":40,"wins":22,"losses":18,"win_rate":55.0,"avg_return":0.72,"nav":1.0283,"mdd":-3.63,"ticker_stats":{"005930":{"wins":1,"losses":1,"total_ret":-2.04,"total":2,"wr":50.0},"000660":{"wins":4,"losses":2,"total_ret":20.25,"total":6,"wr":66.7},"035420":{"wins":2,"losses":2,"total_ret":0.5900000000000012,"total":4,"wr":50.0},"035720":{"wins":0,"losses":5,"total_ret":-31.77,"total":5,"wr":0.0},"051910":{"wins":2,"losses":1,"total_ret":-3.38,"total":3,"wr":66.7},"006400":{"wins":4,"losses":1,"total_ret":18.86,"total":5,"wr":80.0},"003670":{"wins":4,"losses":1,"total_ret":11.62,"total":5,"wr":80.0},"055550":{"wins":2,"losses":1,"total_ret":2.710000000000001,"total":3,"wr":66.7},"105560":{"wins":1,"losses":3,"total_ret":-5.670000000000001,"total":4,"wr":25.0},"012330":{"wins":2,"losses":1,"total_ret":17.52,"total":3,"wr":66.7}}},
+  "E_대조군(필터없음)":{"signals":125,"filtered_out":0,"trades":125,"wins":59,"losses":66,"win_rate":47.2,"avg_return":0.11,"nav":1.0106,"mdd":-7.76,"ticker_stats":{"005930":{"wins":2,"losses":4,"total_ret":2.03,"total":6,"wr":33.3},"000660":{"wins":8,"losses":5,"total_ret":34.330000000000005,"total":13,"wr":61.5},"035420":{"wins":2,"losses":7,"total_ret":-41.220000000000006,"total":9,"wr":22.2},"035720":{"wins":6,"losses":11,"total_ret":-20.750000000000004,"total":17,"wr":35.3},"051910":{"wins":4,"losses":7,"total_ret":5.22,"total":11,"wr":36.4},"006400":{"wins":10,"losses":6,"total_ret":53.379999999999995,"total":16,"wr":62.5},"003670":{"wins":9,"losses":10,"total_ret":-53.48,"total":19,"wr":47.4},"055550":{"wins":9,"losses":7,"total_ret":8.909999999999998,"total":16,"wr":56.2},"105560":{"wins":2,"losses":4,"total_ret":-15.32,"total":6,"wr":33.3},"012330":{"wins":7,"losses":5,"total_ret":40.65,"total":12,"wr":58.3}}},
+  "F_최엄격(A+5일)":{"signals":12,"filtered_out":223,"trades":12,"wins":7,"losses":5,"win_rate":58.3,"avg_return":0.37,"nav":1.0042,"mdd":-1.36,"ticker_stats":{"000660":{"wins":1,"losses":1,"total_ret":0.7199999999999998,"total":2,"wr":50.0},"035420":{"wins":1,"losses":0,"total_ret":8.16,"total":1,"wr":100.0},"035720":{"wins":2,"losses":3,"total_ret":-3.2300000000000004,"total":5,"wr":40.0},"006400":{"wins":1,"losses":0,"total_ret":1.06,"total":1,"wr":100.0},"003670":{"wins":0,"losses":1,"total_ret":-9.31,"total":1,"wr":0.0},"105560":{"wins":1,"losses":0,"total_ret":0.31,"total":1,"wr":100.0},"012330":{"wins":1,"losses":0,"total_ret":6.73,"total":1,"wr":100.0}}},
+  "G_RSI+ADX":{"signals":40,"filtered_out":152,"trades":40,"wins":18,"losses":22,"win_rate":45.0,"avg_return":0.51,"nav":1.0198,"mdd":-4.65,"ticker_stats":{"005930":{"wins":0,"losses":1,"total_ret":-1.06,"total":1,"wr":0.0},"000660":{"wins":2,"losses":1,"total_ret":7.750000000000001,"total":3,"wr":66.7},"035420":{"wins":1,"losses":3,"total_ret":-13.79,"total":4,"wr":25.0},"035720":{"wins":2,"losses":6,"total_ret":-15.95,"total":8,"wr":25.0},"051910":{"wins":0,"losses":2,"total_ret":-12.51,"total":2,"wr":0.0},"006400":{"wins":3,"losses":1,"total_ret":20.990000000000002,"total":4,"wr":75.0},"003670":{"wins":5,"losses":2,"total_ret":13.14,"total":7,"wr":71.4},"055550":{"wins":1,"losses":3,"total_ret":-3.75,"total":4,"wr":25.0},"105560":{"wins":1,"losses":1,"total_ret":0.1,"total":2,"wr":50.0},"012330":{"wins":3,"losses":2,"total_ret":25.55,"total":5,"wr":60.0}}},
+  "H_BB+ADX+Stoch":{"signals":32,"filtered_out":176,"trades":32,"wins":18,"losses":14,"win_rate":56.2,"avg_return":0.74,"nav":1.0236,"mdd":-2.21,"ticker_stats":{"005930":{"wins":0,"losses":1,"total_ret":-5.08,"total":1,"wr":0.0},"000660":{"wins":2,"losses":1,"total_ret":7.750000000000001,"total":3,"wr":66.7},"035420":{"wins":2,"losses":2,"total_ret":0.5900000000000012,"total":4,"wr":50.0},"035720":{"wins":2,"losses":5,"total_ret":-16.4,"total":7,"wr":28.6},"051910":{"wins":1,"losses":1,"total_ret":-0.02999999999999997,"total":2,"wr":50.0},"006400":{"wins":3,"losses":1,"total_ret":19.41,"total":4,"wr":75.0},"003670":{"wins":4,"losses":1,"total_ret":11.62,"total":5,"wr":80.0},"055550":{"wins":2,"losses":0,"total_ret":7.23,"total":2,"wr":100.0},"105560":{"wins":1,"losses":1,"total_ret":0.1,"total":2,"wr":50.0},"012330":{"wins":1,"losses":1,"total_ret":-1.3699999999999999,"total":2,"wr":50.0}}}
+};
+
+// Short strategy labels for charts
+const STRATEGY_SHORT = {
+  "A_엄격(RSI+ADX+BB)":"A_엄격",
+  "B_중간(ADX+BB)":"B_중간",
+  "C_완화(BB만)":"C_완화",
+  "D_눌림목(가격관계)":"D_눌림목",
+  "E_대조군(필터없음)":"E_대조군",
+  "F_최엄격(A+5일)":"F_최엄격",
+  "G_RSI+ADX":"G_RSI+ADX",
+  "H_BB+ADX+Stoch":"H_BB+ADX+Stoch"
+};
+
+function tickerName(code) { return TICKER_MAP[code] || code; }
+
+// ========== TAB SWITCHING ==========
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-panel');
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabBtns.forEach(b => b.classList.remove('active'));
+    tabPanels.forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ========== CHART DEFAULTS ==========
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(51,65,85,0.5)';
+Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+Chart.defaults.font.size = 13;
+
+let chartInstances = {};
+
+// ========== INIT ==========
+function initApp() {
+  buildPipeline();
+  buildGuardrails();
+  buildStrategyTable();
+  buildCharts();
+  buildDrilldown();
+  buildConfigTables();
+  buildExitGrid();
+  initSimulator();
+}
+
+// ========== TAB 1: PIPELINE ==========
+function buildPipeline() {
+  const steps = [
+    {num:1, label:'데이터 입력', status:'confirmed', detail:'<strong>일봉 데이터</strong>, <strong>거래대금</strong>, <strong>섹터 정보</strong>, <strong>뉴스/공시</strong> 데이터를 수집합니다.<ul><li>일봉: OHLCV (시가, 고가, 저가, 종가, 거래량)</li><li>거래대금: 종가 × 거래량</li><li>섹터: GICS 분류 기준</li><li>뉴스/공시: 실시간 수집</li></ul>'},
+    {num:2, label:'워밍업 구간 확보', status:'confirmed', detail:'지표 계산에 필요한 <strong>최소 데이터 기간</strong>을 확보합니다.<ul><li>RSI, BB, ADX 등 기술지표 계산을 위한 선행 데이터</li><li>DTW 패턴 매칭을 위한 기준 윈도우</li></ul>'},
+    {num:3, label:'Regime 4단계 분류', status:'candidate', detail:'시장 상태를 <strong>4단계</strong>로 분류합니다.<ul><li>BULL: 상승장</li><li>NEUTRAL: 보합장</li><li>BEAR: 하락장</li><li>CRISIS: 급락장</li></ul><strong>상태머신 규칙:</strong><ul><li>Hysteresis 적용 (반복 전환 방지)</li><li>인접 전환만 허용 (BULL↔NEUTRAL↔BEAR↔CRISIS)</li></ul>'},
+    {num:4, label:'유니버스 필터', status:'confirmed', detail:'<strong>20일 평균 거래대금 ≥ 3억원</strong> 조건으로 유동성 부족 종목을 제외합니다.<ul><li>유동성이 낮은 종목은 슬리피지 위험이 높음</li><li>거래대금 기준: 300,000,000원</li></ul>'},
+    {num:5, label:'즉시탈락 6항목', status:'deferred', detail:'<strong>6개 슬롯</strong>의 즉시탈락 조건을 검사합니다.<ul><li><strong>Slot 1 (Confirmed):</strong> 이상거래량 4조건 동시충족 시 탈락<br>— 거래량 배수 ≥ 5.0배 AND 뉴스/공시 있음 AND 섹터 비동조 AND 비정상 가격 패턴</li><li><strong>Slot 2~6:</strong> 미확정 (Deferred)</li></ul>'},
+    {num:6, label:'신호 3종 독립 계산', status:'candidate', detail:'<strong>3가지 신호 모듈</strong>을 독립적으로 계산합니다.<ul><li><strong>DTW 70:30</strong> — Dynamic Time Warping 기반 패턴 매칭 (가중치 70%)</li><li><strong>클래식</strong> — 전통적 기술적 분석 (RSI, BB, ADX 등)</li><li><strong>기술</strong> — 추가 기술지표 조합</li></ul>'},
+    {num:7, label:'가중 점수 (100점 만점)', status:'candidate', detail:'3종 신호를 <strong>가중 합산</strong>하여 100점 만점 점수를 산출합니다.<ul><li>가중치 배분은 Candidate 상태 (비교 검증 중)</li><li>DTW 비율: 70:30 (현재 설정)</li></ul>'},
+    {num:8, label:'위험 감점', status:'deferred', detail:'위험 요소에 따라 <strong>감점</strong>을 적용합니다.<ul><li>감점 하한: <strong>-60점</strong> (RISK_PENALTY_FLOOR)</li><li>세부 감점 규칙은 미확정 (Deferred)</li><li>현재 감점: 0점 (규칙 정의 전)</li></ul>'},
+    {num:9, label:'최종 추천 판정', status:'confirmed', detail:'최종 추천 조건: <strong>score ≥ cut AND 즉시탈락=False AND 가드레일 통과</strong><ul><li>score_cut: 60점 (Candidate)</li><li>즉시탈락 조건 미충족</li><li>가드레일 전체 통과</li></ul>'},
+    {num:10, label:'출구 4모드', status:'candidate', detail:'4가지 출구 전략 중 하나를 선택합니다.<ul><li><strong>FIXED_8:</strong> 익절 +8%, 손절 -5%</li><li><strong>FIXED_10:</strong> 익절 +10%, 손절 -5% (기본값)</li><li><strong>TRAILING:</strong> 활성화 +5%, 트레일 -3%</li><li><strong>FRIDAY_CLOSE:</strong> 금요일 무조건 청산</li></ul>'}
+  ];
+
+  const container = document.getElementById('pipeline');
+  steps.forEach(s => {
+    const statusClass = s.status === 'confirmed' ? 'badge-green' : s.status === 'candidate' ? 'badge-yellow' : 'badge-red';
+    const statusLabel = s.status === 'confirmed' ? 'Confirmed' : s.status === 'candidate' ? 'Candidate' : 'Deferred';
+    const el = document.createElement('div');
+    el.className = 'pipe-step';
+    el.innerHTML = `
+      <div class="pipe-head">
+        <div class="pipe-num">${s.num}</div>
+        <div class="pipe-label">${s.label}</div>
+        <span class="badge ${statusClass} pipe-badge">${statusLabel}</span>
+        <span class="pipe-arrow">▾</span>
+      </div>
+      <div class="pipe-body">
+        <div class="pipe-detail">${s.detail}</div>
+      </div>`;
+    el.querySelector('.pipe-head').addEventListener('click', () => el.classList.toggle('open'));
+    container.appendChild(el);
+  });
+}
+
+// ========== GUARDRAILS ==========
+function buildGuardrails() {
+  const items = [
+    {icon:'📅', title:'하루 최대 1건', desc:'일일 신호 발생 제한'},
+    {icon:'📆', title:'주당 최대 2건', desc:'주간 진입 횟수 제한'},
+    {icon:'🚫', title:'연속 손실 3회 → 중지', desc:'다음 주 진입 자동 중지'},
+    {icon:'📏', title:'적응기간 12주', desc:'시스템 운영 적응 기간'},
+    {icon:'📊', title:'규칙 준수율 80% 미만', desc:'원인 점검 필요'},
+    {icon:'⏰', title:'장 시작 첫 15분 보류', desc:'초기 변동성 회피'},
+    {icon:'📈', title:'VIX 25+ → 포지션 감소', desc:'과열 시 hold 또는 축소'},
+    {icon:'⚡', title:'서킷브레이커 → 자동 중지', desc:'신규 진입 즉시 차단'}
+  ];
+  const grid = document.getElementById('guardrails');
+  items.forEach(it => {
+    grid.innerHTML += `<div class="gr-item"><div class="gr-icon">${it.icon}</div><div class="gr-text"><strong>${it.title}</strong>${it.desc}</div></div>`;
+  });
+}
+
+// ========== TAB 2: STRATEGY TABLE ==========
+function buildStrategyTable() {
+  const tbody = document.getElementById('strategyBody');
+  const keys = Object.keys(V4);
+  keys.forEach(k => {
+    const d = V4[k];
+    const retClass = d.avg_return >= 0 ? 'pos' : 'neg';
+    const mddClass = 'neg';
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:600">${k}</td>
+      <td class="num">${d.signals}</td><td class="num">${d.filtered_out}</td><td class="num">${d.trades}</td>
+      <td class="num">${d.wins}</td><td class="num">${d.losses}</td>
+      <td class="num">${d.win_rate}</td>
+      <td class="num ${retClass}">${d.avg_return}</td>
+      <td class="num">${d.nav}</td>
+      <td class="num ${mddClass}">${d.mdd}</td>
+    </tr>`;
+  });
+}
+
+// ========== TAB 2: CHARTS ==========
+function buildCharts() {
+  const keys = Object.keys(V4);
+  const labels = keys.map(k => STRATEGY_SHORT[k] || k);
+  const wrData = keys.map(k => V4[k].win_rate);
+  const avgRetData = keys.map(k => V4[k].avg_return);
+  const mddData = keys.map(k => V4[k].mdd);
+
+  const barOpts = (ttl) => ({
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, title: { display: false } },
+    scales: {
+      x: { ticks: { maxRotation: 45, font: { size: 10 } }, grid: { display: false } },
+      y: { grid: { color: 'rgba(51,65,85,0.3)' } }
+    }
+  });
+
+  // Win rate
+  chartInstances.wr = new Chart(document.getElementById('chartWR'), {
+    type: 'bar', data: {
+      labels,
+      datasets: [{ data: wrData, backgroundColor: wrData.map(v => v >= 50 ? '#10B981' : '#EF4444'), borderRadius: 4, maxBarThickness: 48 }]
+    }, options: { ...barOpts(), scales: { ...barOpts().scales, y: { ...barOpts().scales.y, suggestedMin: 30, suggestedMax: 70, ticks: { callback: v => v + '%' } } } }
+  });
+
+  // Avg return
+  chartInstances.avgRet = new Chart(document.getElementById('chartAvgRet'), {
+    type: 'bar', data: {
+      labels,
+      datasets: [{ data: avgRetData, backgroundColor: avgRetData.map(v => v >= 0 ? '#10B981' : '#EF4444'), borderRadius: 4, maxBarThickness: 48 }]
+    }, options: { ...barOpts(), scales: { ...barOpts().scales, y: { ...barOpts().scales.y, ticks: { callback: v => v + '%' } } } }
+  });
+
+  // MDD
+  chartInstances.mdd = new Chart(document.getElementById('chartMDD'), {
+    type: 'bar', data: {
+      labels,
+      datasets: [{ data: mddData, backgroundColor: mddData.map(v => v > -3 ? '#F59E0B' : '#EF4444'), borderRadius: 4, maxBarThickness: 48 }]
+    }, options: { ...barOpts(), scales: { ...barOpts().scales, y: { ...barOpts().scales.y, ticks: { callback: v => v + '%' } } } }
+  });
+}
+
+// ========== TAB 2: DRILLDOWN ==========
+function buildDrilldown() {
+  const sel = document.getElementById('drillStrategy');
+  Object.keys(V4).forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = k;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', updateDrill);
+  updateDrill();
+}
+
+function updateDrill() {
+  const key = document.getElementById('drillStrategy').value;
+  const ts = V4[key].ticker_stats;
+  const tbody = document.getElementById('drillBody');
+  tbody.innerHTML = '';
+
+  const tickers = Object.keys(ts).sort((a,b) => ts[b].wr - ts[a].wr);
+  tickers.forEach(t => {
+    const d = ts[t];
+    const retClass = d.total_ret >= 0 ? 'pos' : 'neg';
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:600">${tickerName(t)}<span style="color:#64748b;font-weight:400;margin-left:6px;font-size:11px">${t}</span></td>
+      <td class="num">${d.total}</td><td class="num">${d.wins}</td><td class="num">${d.losses}</td>
+      <td class="num">${d.wr}</td>
+      <td class="num ${retClass}">${d.total_ret}</td>
+    </tr>`;
+  });
+
+  // Chart
+  if (chartInstances.drill) chartInstances.drill.destroy();
+  const labels = tickers.map(t => tickerName(t));
+  const wrArr = tickers.map(t => ts[t].wr);
+  chartInstances.drill = new Chart(document.getElementById('chartDrill'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: '승률(%)', data: wrArr, backgroundColor: wrArr.map(v => v >= 50 ? '#10B981' : '#EF4444'), borderRadius: 4, maxBarThickness: 48 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+        y: { suggestedMin: 0, suggestedMax: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(51,65,85,0.3)' } }
+      }
+    }
+  });
+}
+
+// ========== TAB 3: CONFIG ==========
+function buildConfigTables() {
+  // Confirmed
+  const confirmed = [
+    ['SCORE_MAX','100','최대 점수'],
+    ['RISK_PENALTY_FLOOR','-60','위험 감점 하한'],
+    ['EXCLUSION_SLOT_COUNT','6','즉시탈락 슬롯 수'],
+    ['SIGNAL_MODULE_COUNT','3','신호 모듈 수'],
+    ['TRANSACTION_COST_MIN','0.005 (0.5%)','최소 거래비용'],
+    ['TRANSACTION_COST_MAX','0.006 (0.6%)','최대 거래비용'],
+    ['ADAPTATION_WEEKS','12','적응기간 (주)'],
+    ['MAX_DAILY_SIGNALS','1','일일 최대 신호'],
+    ['MAX_WEEKLY_SIGNALS','2','주간 최대 신호'],
+    ['CONSECUTIVE_LOSS_LIMIT','3','연속 손실 한도'],
+    ['COMPLIANCE_RATE_FLOOR','80.0%','규칙 준수율 하한'],
+    ['MARKET_OPEN_BUFFER_MIN','15','장 시작 보류 (분)']
+  ];
+  const cTbody = document.querySelector('#confirmedTable tbody');
+  confirmed.forEach(r => {
+    cTbody.innerHTML += `<tr><td style="font-weight:600;color:#10B981">${r[0]}</td><td class="num" style="color:#e2e8f0">${r[1]}</td><td style="color:#94a3b8">${r[2]}</td></tr>`;
+  });
+
+  // Candidate
+  const candidate = [
+    ['score_cut','60','55 / 60 / 65','점수 컷라인'],
+    ['default_exit_mode','FIXED_10','—','기본 출구 모드'],
+    ['volatility_threshold_pct','7.0%','6 / 7 / 8%','변동성 임계치'],
+    ['dtw_ratio','0.70 (70:30)','—','DTW 가중치 비율'],
+    ['volume_window_days','20','10 / 20 / 40','거래량 윈도우 (일)'],
+    ['liquidity_floor_krw','300,000,000 (3억원)','—','유동성 하한'],
+    ['abnormal_volume_multiple','5.0배','—','이상 거래량 배수'],
+    ['vix_overheat_threshold','25.0','—','VIX 과열 임계치'],
+    ['walk_forward_years','2','—','워크포워드 기간 (년)'],
+    ['transaction_cost_pct','0.006 (0.6%)','—','거래비용 비율']
+  ];
+  const candTbody = document.querySelector('#candidateTable tbody');
+  candidate.forEach(r => {
+    candTbody.innerHTML += `<tr><td style="font-weight:600;color:#F59E0B">${r[0]}</td><td class="num" style="color:#e2e8f0">${r[1]}</td><td class="num" style="color:#64748b">${r[2]}</td><td style="color:#94a3b8">${r[3]}</td></tr>`;
+  });
+
+  // Deferred
+  const deferred = [
+    ['즉시탈락 Slot 2~6 세부 정의','미확정'],
+    ['위험 감점 세부 규칙','미확정'],
+    ['DTW 70:30 내부 피처 정의','미확정'],
+    ['하이브리드 출구 (v2.0)','미확정'],
+    ['SNS 데이터 입력','미확정'],
+    ['점프 전환','미확정']
+  ];
+  const dTbody = document.querySelector('#deferredTable tbody');
+  deferred.forEach(r => {
+    dTbody.innerHTML += `<tr><td style="font-weight:600;color:#EF4444">${r[0]}</td><td><span class="badge badge-red">${r[1]}</span></td></tr>`;
+  });
+}
+
+function buildExitGrid() {
+  const exits = [
+    {mode:'FIXED_8', desc:'고정 익절 <strong>+8%</strong><br>손절 <strong>-5%</strong>', color:'#3B82F6'},
+    {mode:'FIXED_10', desc:'고정 익절 <strong>+10%</strong><br>손절 <strong>-5%</strong><br><span style="color:#10B981;font-size:11px">기본값</span>', color:'#10B981'},
+    {mode:'TRAILING', desc:'활성화 <strong>+5%</strong><br>트레일 <strong>-3%</strong>', color:'#F59E0B'},
+    {mode:'FRIDAY_CLOSE', desc:'익절 없음<br>금요일 <strong>무조건 청산</strong>', color:'#EF4444'}
+  ];
+  const grid = document.getElementById('exitGrid');
+  exits.forEach(e => {
+    grid.innerHTML += `<div class="exit-card"><h4 style="color:${e.color}">${e.mode}</h4><p>${e.desc}</p></div>`;
+  });
+}
+
+// ========== TAB 4: SIMULATOR ==========
+function initSimulator() {
+  // Slider value sync
+  ['DTW','Classic','Tech'].forEach(name => {
+    const slider = document.getElementById('sim' + name);
+    const val = document.getElementById('sim' + name + 'Val');
+    slider.addEventListener('input', () => { val.textContent = slider.value; });
+  });
+
+  document.getElementById('simRunBtn').addEventListener('click', runSimulation);
+}
+
+function runSimulation() {
+  const stock = document.getElementById('simStock').value || '미입력';
+  const liquidity = parseFloat(document.getElementById('simLiquidity').value) || 0;
+  const volMult = parseFloat(document.getElementById('simVolMult').value) || 0;
+  const dtw = parseInt(document.getElementById('simDTW').value);
+  const classic = parseInt(document.getElementById('simClassic').value);
+  const tech = parseInt(document.getElementById('simTech').value);
+  const hasNews = document.getElementById('simNews').checked;
+  const hasSector = document.getElementById('simSector').checked;
+  const hasAbnormal = document.getElementById('simAbnormal').checked;
+  const regime = document.getElementById('simRegime').value;
+  const exitMode = document.getElementById('simExit').value;
+
+  const results = [];
+  let canProceed = true;
+
+  // Step 1: Universe filter (3억 = 300,000,000 = 3000 억원 단위? No — input is 억원, so threshold is 3 억원 = 3)
+  // Actually the context says 3억원 = 300,000,000원, input is in 억원, so threshold = 3
+  const liqPass = liquidity >= 3;
+  results.push({
+    title: '유니버스 필터',
+    pass: liqPass,
+    detail: `20일 평균 거래대금: ${liquidity}억원 ${liqPass ? '≥' : '<'} 3억원 → ${liqPass ? 'PASS' : 'FAIL'}`
+  });
+  if (!liqPass) canProceed = false;
+
+  // Step 2: Immediate exclusion (Slot 1 — all 4 conditions must be true for exclusion)
+  const excl1 = volMult >= 5.0;
+  const excl2 = !hasNews; // TABLE 11: 뉴스/공시 없어야 충족
+  const excl3 = !hasSector; // 섹터 비동조 = sector NOT in sync
+  const excl4 = hasAbnormal;
+  const allExcl = excl1 && excl2 && excl3 && excl4;
+  const exclPass = !allExcl;
+
+  let exclDetail = `Slot 1 (이상거래량 4조건):\n`;
+  exclDetail += `  (1) 거래량 배수 ≥ 5.0: ${volMult}배 → ${excl1 ? '충족' : '미충족'}\n`;
+  exclDetail += `  (2) 뉴스/공시 없음: ${!hasNews ? '없음' : '있음'} → ${excl2 ? '충족' : '미충족'}\n`;
+  exclDetail += `  (3) 섹터 비동조: ${!hasSector ? '비동조' : '동조'} → ${excl3 ? '충족' : '미충족'}\n`;
+  exclDetail += `  (4) 비정상 가격: ${hasAbnormal ? '있음' : '없음'} → ${excl4 ? '충족' : '미충족'}\n`;
+  exclDetail += `  4조건 동시충족: ${allExcl ? '예 → 즉시탈락' : '아니오 → PASS'}`;
+
+  results.push({
+    title: '즉시탈락 검사',
+    pass: exclPass,
+    detail: exclDetail
+  });
+  if (!exclPass) canProceed = false;
+
+  // Step 3: Weighted score — signal weights not defined, show as "미설정"
+  const weightedScore = '미설정';
+  const scoreNote = `DTW: ${dtw}점, 클래식: ${classic}점, 기술: ${tech}점\n가중치 미설정 — 단순 평균으로 참고값 계산: ${((dtw + classic + tech) / 3).toFixed(1)}점`;
+  const simpleAvg = (dtw + classic + tech) / 3;
+
+  results.push({
+    title: '가중 점수 계산',
+    pass: null, // warning
+    detail: scoreNote
+  });
+
+  // Step 4: Risk penalty
+  results.push({
+    title: '위험 감점',
+    pass: null,
+    detail: '세부 규칙 미확정 — 현재 감점: 0점\n감점 하한: -60점 (RISK_PENALTY_FLOOR)'
+  });
+
+  // Step 5: Final score vs cutline
+  const finalScore = simpleAvg; // using simple avg as reference
+  const scoreCut = 60;
+  const scoreAboveCut = finalScore >= scoreCut;
+  const scorePass = canProceed && scoreAboveCut;
+  results.push({
+    title: '최종 점수 vs 컷라인',
+    pass: canProceed ? scoreAboveCut : false,
+    detail: `참고 점수: ${finalScore.toFixed(1)}점 ${scoreAboveCut ? '≥' : '<'} ${scoreCut}점 (score_cut)${!canProceed ? ' (이전 단계 탈락으로 진행 불가)' : ''}\n※ 가중치 미설정으로 단순 평균 기준`
+  });
+
+  // Step 6: Guardrails
+  const crisisCheck = regime === 'CRISIS';
+  const guardrailPass = !crisisCheck;
+  let grDetail = `Regime: ${regime}`;
+  if (crisisCheck) grDetail += ' → CRISIS 상태: 신규 진입 제한';
+  else grDetail += ' → 가드레일 통과';
+  grDetail += `\n출구 모드: ${exitMode}`;
+
+  results.push({
+    title: '가드레일 상태',
+    pass: guardrailPass,
+    detail: grDetail
+  });
+
+  // Final verdict
+  const allPass = canProceed && scoreAboveCut && guardrailPass;
+  const isReject = !canProceed;
+
+  // Render
+  const output = document.getElementById('simOutput');
+  let html = '';
+
+  results.forEach(r => {
+    const iconClass = r.pass === true ? 'pass' : r.pass === false ? 'fail' : 'warn';
+    const iconText = r.pass === true ? '✓' : r.pass === false ? '✗' : '?';
+    html += `<div class="sim-step">
+      <div class="sim-icon ${iconClass}">${iconText}</div>
+      <div class="sim-step-info">
+        <div class="sim-step-title">${r.title}</div>
+        <div class="sim-step-detail" style="white-space:pre-line">${r.detail}</div>
+      </div>
+    </div>`;
+  });
+
+  // Verdict badge
+  let verdictClass, verdictLabel, verdictSub;
+  if (allPass) {
+    verdictClass = 'recommend';
+    verdictLabel = '추천';
+    verdictSub = `${stock} — 모든 파이프라인 단계를 통과했습니다`;
+  } else if (isReject) {
+    verdictClass = 'reject';
+    verdictLabel = '탈락';
+    verdictSub = `${stock} — 기본 필터 또는 즉시탈락 조건에 해당합니다`;
+  } else {
+    verdictClass = 'hold';
+    verdictLabel = '보류';
+    verdictSub = `${stock} — 점수 미달 또는 가드레일 조건 미충족`;
+  }
+
+  html += `<div class="sim-verdict ${verdictClass}">
+    <div class="sim-verdict-label" style="color:${verdictClass === 'recommend' ? '#10B981' : verdictClass === 'reject' ? '#EF4444' : '#F59E0B'}">${verdictLabel}</div>
+    <div class="sim-verdict-sub">${verdictSub}</div>
+  </div>`;
+
+  output.innerHTML = html;
+}
+</script>
+</body>
+</html>

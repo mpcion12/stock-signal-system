@@ -680,7 +680,7 @@ function updateDrill() {
       <td style="font-weight:600">${tickerName(t)}<span style="color:#64748b;font-weight:400;margin-left:6px;font-size:11px">${t}</span></td>
       <td class="num">${d.total}</td><td class="num">${d.wins}</td><td class="num">${d.losses}</td>
       <td class="num">${d.wr}</td>
-      <td class="num ${retClass}">${d.total_ret}</td>
+      <td class="num ${retClass}">${parseFloat(d.total_ret.toFixed(2))}</td>
     </tr>`;
   });
 
